@@ -13,13 +13,13 @@
 #include "user_interface.h"
 #include "espconn.h"
 #include "osapi.h"
+#include "user_config.h"
 #include "debug.h" // Remove this line to disable debugging
 
 #define MESSAGE "ESP8266"
 
 LOCAL struct espconn udp_espconn;
 LOCAL os_timer_t the_timer;
-
 
 // RF Pre-Init function ... according to SDK API reference this needs to be
 // in user_main.c even though we aren't using it.  It can be used to set RF
@@ -111,14 +111,6 @@ LOCAL void ICACHE_FLASH_ATTR timer_function()
 
 }
 
-// Sent callback function. Not much to do here so let's just output some debug. 
-LOCAL void ICACHE_FLASH_ATTR sent_callback(void *arg) 
-{
-  #ifdef DEBUG_ON
-    os_printf("Sent message to destination\n"); 
-  #endif
-}
-
 // Create UDP function. This is where we setup our espconn connection block
 // including the desination IP and port. Then we create the connection.
 LOCAL void ICACHE_FLASH_ATTR create_udp() 
@@ -150,8 +142,15 @@ LOCAL void ICACHE_FLASH_ATTR create_udp()
     os_printf("Remote port: %d\n", p_udp->remote_port);
   #endif
 
-  // Register our sent callback ... see the sent_callback function
-  espconn_regist_sentcb(&udp_espconn, sent_callback);
+  // Register our callbacks ... see the callback functions in callbacks.c
+  result = espconn_regist_sentcb(&udp_espconn, sent_callback);
+  #ifdef DEBUG_ON
+    os_printf("espconn register sent cb status: %d\n", result);
+  #endif
+  result = espconn_regist_recvcb(&udp_espconn, receive_callback);
+  #ifdef DEBUG_ON
+    os_printf("espconn register recv cb status: %d\n", result);
+  #endif
 
   // And last but not least, setup and arm the timer ... see timer_function
   os_timer_disarm(&the_timer);
