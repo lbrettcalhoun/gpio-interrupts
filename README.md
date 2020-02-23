@@ -1,2 +1,2 @@
-# udp
-Example of UDP server on ESP8266
+# gpio interrupts
+Example of using GPIO interruputs with ESP8266

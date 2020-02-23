@@ -25,13 +25,12 @@ LDFLAGS = -Teagle.app.v6.ld
 user_main-0x00000.bin: user_main
 	esptool.py elf2image $^
 
-user_main: user_main.o setup.o callbacks.o
+user_main: user_main.o setup.o
 
 user_main.o: user_main.c
 
 setup.o: setup.c
 
-callbacks.o: callbacks.c
 # This one doesn't get called automatically.  Use "make flash" to actually flash the firmware to the ESP8266
 # user_main-0x00000.bin is the boot firmware ... it is uploaded to flash address 0x00000
 # user_main-0x10000.bin is our custom firmware ... it is uploaded to flash address 0x10000
@@ -41,4 +40,4 @@ flash: user_main-0x00000.bin
 
 # Use make clean to get rid of the firmware and the executables and the object fles
 clean:
-	rm -f user_main user_main.o user_main-0x00000.bin user_main-0x10000.bin setup.o callbacks.o
+	rm -f user_main user_main.o user_main-0x00000.bin user_main-0x10000.bin setup.o 

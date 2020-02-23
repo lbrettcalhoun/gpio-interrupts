@@ -1,71 +1,77 @@
-#include "credentials.h"
 #include "osapi.h"
 #include "user_interface.h"
 #include "gpio.h"
-#include "espconn.h"
-#include "mem.h"
 #include "debug.h"
 
-// Setup GPIO2
-void ICACHE_FLASH_ATTR setup_gpio ()
+// This function is defined in user_main.c
+extern void interrupt_function();
+
+// Setup GPIO2 for either the "LOW" example or the "HIGH" example. Note that 
+// there is no debounce on the momentary switches hardware or in this software.
+// So you will get some extra output when the switches bounce.
+void ICACHE_FLASH_ATTR setup_gpio (uint8 example)
 {
   // Initialize the GPIO sub-system
   gpio_init();
 
-  // Set GPIO2 to be GPIO2 ... yeah it sounds stupid to do this but you
-  // don't know how GPIO2 was previously configured ... it could have been
-  // configured for something completely different
+  // Set GPIO2 to be GPIO2 ... yeah it sounds stupid but gotta do it because
+  // the ESP8266 multiplexes all kinds of different functions for each pin.
+  // If you need to see all the different pin functions (FUNC_GPIO2) or the
+  // different multiplexers (PERIPHS_IO_MUX_GPIO2_U) then look in eagle_soc.h.
   PIN_FUNC_SELECT(PERIPHS_IO_MUX_GPIO2_U, FUNC_GPIO2);
  
-  // Set GPIO2 as output and set it to LOW
-  gpio_output_set(0, BIT2, BIT2, 0);
+  // Temporarily disable all GPIO interrupts while we make changes to the configuration
+  ETS_GPIO_INTR_DISABLE();
 
-}
+  if (!example) {
 
-// Setup udp_espconn structure as a UDP connection block. Notice that we
-// pass in a pointer to udp_espconn. Also notice that because our parameter
-// is a pointer we have to use -> to set the members.
-void ICACHE_FLASH_ATTR setup_udp(struct espconn *p_espconn) 
-{
+    // LOW example
+    // Set GPIO2 as input and enable the internal pullup resistor. Connect GPIO2
+    // to a momentary contact switch and then complete the circuit with a resistor
+    // and on to ground. When you press the switch GPIO2 will transition to LOW and
+    // the interrupt will fire.
+    GPIO_DIS_OUTPUT(GPIO_ID_PIN(2));
+    PIN_PULLUP_EN(PERIPHS_IO_MUX_GPIO2_U);
   
-  // Set the connection type to UDP
-  p_espconn->type = ESPCONN_UDP;
+    // Clear out the interrupt status for GPIO2
+    GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, BIT2);
+  
+    // Set the interrupt handler for the GPIO pins
+    ETS_GPIO_INTR_ATTACH(interrupt_function, NULL);
+  
+    // Configure the interrupt handler to fire on change to the pin status ... in this 
+    // example since we are holding the pin HIGH with the pullup let's fire the interrupt
+    // when the pin goes LOW (NEGEDGE)
+    gpio_pin_intr_state_set(GPIO_ID_PIN(2), GPIO_PIN_INTR_NEGEDGE);
+  }
 
-  // Zero out the potential junk that may be in our structure's proto.udp member
-  p_espconn->proto.udp = (esp_udp *) os_zalloc(sizeof (esp_udp));
+  else {
 
-  // Set a local port for our UDP server. Just pick any available port.
-  p_espconn->proto.udp->local_port = espconn_port();
+    // HIGH example. Note that Espressif took the old PIN_PULLDWN_EN out of the SDK.
+    // So we have to manually use a resistor on the breadboard to pulldown the pin.
+    // Set GPIO2 as input and disable the internal pullup resistor. Connect GPIO2
+    // to a momentary contact switch and then complete the circuit by going straight
+    // on to power. Put a resistor between the switch and ground ... this is our pulldown.
+    //  When you press the switch GPIO2 will transition to HIGH and the interrupt will fire.
+    // IMPORTANT NOTE: You have to connect the pulldown resistor AFTER you boot the ESP8266.
+    // Otherwise you will get an endless loop of gibberish on the debug output..
+    GPIO_DIS_OUTPUT(GPIO_ID_PIN(2));
+    PIN_PULLUP_DIS(PERIPHS_IO_MUX_GPIO2_U);
+  
+    // Clear out the interrupt status for GPIO2
+    GPIO_REG_WRITE(GPIO_STATUS_W1TC_ADDRESS, BIT2);
+  
+    // Set the interrupt handler for the GPIO pins
+    ETS_GPIO_INTR_ATTACH(interrupt_function, NULL);
+  
+    // Configure the interrupt handler to fire on change to the pin status ... in this 
+    // example since we are holding the pin LOW with the pulldown let's fire the interrupt
+    // when the pin goes HIGH (POSEDGE)
+    gpio_pin_intr_state_set(GPIO_ID_PIN(2), GPIO_PIN_INTR_POSEDGE);
+  
+  }
 
+  // And finally enable the interrupt handler ... we're ready for action!
+  ETS_GPIO_INTR_ENABLE();
+  
 }
-
-// Setup the WiFi.
-void ICACHE_FLASH_ATTR setup_wifi (void) {
-
-  char const *SSID = WIFI_SSID;
-  char const *PASSWORD = WIFI_PASSWORD;
-
-  // Get the current AP configuration
-  struct softap_config config;
-  wifi_softap_get_config(&config);
-
-  // Don't forget that config.ssid needs to be cast to a pointer because SSID is
-  // itself a pointer (look above where you defined it). Also notice how we have to
-  // null the SSID and password pointers or you will have junk left over from the
-  // previous run.  We use os_bzero to null these pointers (aka char arrays).
-  config.ssid_len = 8;
-  os_bzero(&config.ssid, 32);
-  os_memcpy(&config.ssid, SSID, 8);
-  os_bzero(&config.password, 64);
-  os_memcpy(&config.password, PASSWORD, 10);
-  config.authmode = AUTH_WPA2_PSK;
-  wifi_softap_set_config(&config);
-
-  #ifdef DEBUG_ON
-    os_printf("WIFI Configuration:\n");
-    os_printf("SSID: %s\n", config.ssid);
-    os_printf("Auth Mode: %d\n", config.authmode);
-  #endif
-
-}
-
